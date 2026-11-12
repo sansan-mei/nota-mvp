@@ -1,0 +1,108 @@
+[
+  {
+    "id": "event-reminder",
+    "input": "下周三下午约张总吃饭，提前一天提醒我",
+    "expect": {
+      "tools_include": [
+        "save_summary",
+        "create_calendar_event",
+        "create_reminder"
+      ],
+      "event_start": "2026-11-18 14:00",
+      "reminder_at": "2026-11-17 14:00"
+    }
+  },
+  {
+    "id": "todo-deadline",
+    "input": "记一下，周五之前要把报价单发给李经理",
+    "expect": {
+      "tools_include": [
+        "save_summary",
+        "create_todo"
+      ],
+      "todo_due": "2026-11-13",
+      "tools_exclude": [
+        "create_reminder"
+      ]
+    }
+  },
+  {
+    "id": "multi-todo",
+    "input": "今天开会定了三件事：我负责改一下首页文案，然后约设计师明天下午三点过稿，还有下周一前提交报销",
+    "expect": {
+      "tools_include": [
+        "save_summary",
+        "create_todo"
+      ],
+      "todo_count_min": 2,
+      "event_start": "2026-11-13 15:00"
+    }
+  },
+  {
+    "id": "pure-note",
+    "input": "今天天气不错，下班路上看到一家新开的咖啡店，感觉还挺有意思的",
+    "expect": {
+      "tools_include": [
+        "save_summary"
+      ],
+      "tools_exclude": [
+        "create_todo",
+        "create_reminder",
+        "create_calendar_event"
+      ]
+    }
+  },
+  {
+    "id": "explicit-time-reminder",
+    "input": "明天早上八点半提醒我带身份证",
+    "expect": {
+      "tools_include": [
+        "create_reminder"
+      ],
+      "reminder_at": "2026-11-13 08:30"
+    }
+  },
+  {
+    "id": "history-qa",
+    "input": "上个月跟张总聊的那个报价是多少？",
+    "expect": {
+      "tools_include": [
+        "search_history"
+      ],
+      "tools_exclude": [
+        "save_summary",
+        "create_todo"
+      ],
+      "reply_contains_all": [
+        "128",
+        "118"
+      ]
+    }
+  },
+  {
+    "id": "history-not-found",
+    "input": "我之前跟赵总聊过的合同金额是多少？",
+    "expect": {
+      "tools_include": [
+        "search_history"
+      ],
+      "reply_contains_any": [
+        "没",
+        "未找到",
+        "找不到"
+      ],
+      "reply_not_contains_regex": "\\d{3,}元"
+    }
+  },
+  {
+    "id": "colloquial",
+    "input": "呃那个就是后天晚上要跟老婆去看电影，别忘了，嗯，还要提前买票",
+    "expect": {
+      "tools_include": [
+        "save_summary",
+        "create_todo"
+      ],
+      "event_start": "2026-11-14 19:00"
+    }
+  }
+]

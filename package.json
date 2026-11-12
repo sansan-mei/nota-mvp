@@ -1,0 +1,21 @@
+{
+  "name": "nota-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nota AI 语音便签最小可用版本：Agent 工具调用 + 每日额度",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "start": "node src/server.ts",
+    "dev": "node --watch src/server.ts",
+    "seed:demo": "node scripts/seed-demo.ts",
+    "test": "node --test test/",
+    "proof:quota": "node scripts/quota-proof.ts",
+    "eval": "node eval/run-eval.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
