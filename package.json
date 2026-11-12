@@ -4,15 +4,20 @@
   "private": true,
   "description": "Nota AI 语音便签最小可用版本：Agent 工具调用 + 每日额度",
   "type": "module",
-  "engines": { "node": ">=22.18" },
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
+    "setup": "npm ci && npm --prefix web ci && npm run build",
+    "build": "npm --prefix web run build",
     "start": "node src/server.ts",
     "dev": "node --watch src/server.ts",
+    "dev:web": "npm --prefix web run dev",
     "seed:demo": "node scripts/seed-demo.ts",
     "test": "node --test \"test/*.test.ts\"",
     "proof:quota": "node scripts/quota-proof.ts",
     "eval": "node eval/run-eval.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && npm --prefix web run typecheck"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

@@ -4,23 +4,26 @@
 
 - 后端：Node.js（≥ 22.18，推荐 24 LTS，开发环境 26），**零运行时依赖**：`node:http` + `node:sqlite`，直接运行 TypeScript
 - 模型：通义千问 `qwen3.6-flash`（OpenAI 兼容接口 + function calling），可换 Kimi / GLM / DeepSeek
-- 网页：原生 HTML/JS，Agent 每一步实时显示（NDJSON 流）
+- 网页：React + Vite + Tailwind + shadcn/ui，动效用 [animate-ui](https://animate-ui.com)；Agent 每一步实时显示（NDJSON 流）
 
 ## 运行
 
 ```bash
 cp .env.example .env        # 填入 LLM_API_KEY（阿里云百炼 DashScope）
+npm run setup               # 安装依赖并构建网页（web/dist）
 npm run seed:demo           # 可选：写入几条“过去的便签”，用来演示历史问答
 npm start                   # http://localhost:3000
 ```
 
+开发前端时另开一个终端运行 `npm run dev:web`（http://localhost:5173，接口代理到 3000 端口）。
+
 没有 key 时可以设置 `LLM_MOCK=1`，用离线假模型体验界面和跑测试。
 
-页面右上角可以切换演示用户：小明、小红（Free，每天 10 次），老王（Pro，不限次数）。
+页面右上角可以切换演示用户：小明、小红（Free，每天 10 次），老王（Pro，不限次数）。页面右侧的「额度对账」卡片会实时显示三方对账结果。点「同时发 15 个请求」可以当场演示并发：实测在已用 2 次时，成功 8 个、被拒 7 个，刚好用满 10 次。
 
 ## 架构与关键取舍
 
-单个 Node 服务：静态网页 + 接口 + SQLite。
+单个 Node 服务：接口 + SQLite，同时提供构建好的网页。
 
 - **Agent**：千问 function calling，5 个工具，最多 6 轮。时间由代码换算校验，模型只填本地时间；参数错误时把原因回传给模型，让它自己修正。
 - **副作用先进草稿**，成功后与请求状态在同一事务提交，失败不留半截数据。
@@ -77,7 +80,7 @@ src/
   quota.ts    预占 / 返还 / 清理 / 对账
   llm.ts      OpenAI 兼容客户端 + 离线假模型
   time.ts     时区、自然日、日期对照
-public/       网页
+web/          网页（React + shadcn/ui + animate-ui），构建产物 web/dist 由后端提供
 test/         单元测试 + 多进程并发集成测试
 scripts/      quota-proof.ts、seed-demo.ts
 eval/         评估用例与评估脚本

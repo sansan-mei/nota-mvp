@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadDotEnv, readConfig } from './config.ts';
@@ -14,7 +15,10 @@ const swept = sweepStale(db, new Date(), config.staleProcessingMs);
 if (swept) console.log(`[nota] 清理了 ${swept} 条超时未完成的请求并返还额度`);
 
 const llm = createLLM(config.llm);
-const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
+const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist');
+if (!existsSync(join(publicDir, 'index.html'))) {
+  console.warn('[nota] 未找到 web/dist，请先运行 npm run build（只有接口可用）');
+}
 const server = createServer(createHandler({ db, llm, config, publicDir }));
 
 server.listen(config.port, () => {

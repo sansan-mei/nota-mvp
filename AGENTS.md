@@ -4,7 +4,8 @@
 
 ## 约束
 
-- **不加运行时依赖**。只用 Node 内置模块（`node:http`、`node:sqlite`、`fetch`）。devDependencies 只放类型检查工具。
+- **后端不加运行时依赖**。`src/` 只用 Node 内置模块（`node:http`、`node:sqlite`、`fetch`），根目录的 devDependencies 只放类型检查工具。
+- **前端在 `web/`**：React + Vite + Tailwind v4 + shadcn/ui，动效用 animate-ui 与 motion。新增 shadcn 组件后运行 `npx @animate-ui/cli@latest animate <组件名>`；`src/components/ui/` 是生成代码，尽量不手改。
 - **TypeScript 只用可擦除语法**：Node 直接运行 `.ts`，不经过编译。不能用 `enum`、`namespace`、参数属性；导入要写 `.ts` 后缀；纯类型导入用 `import type`。
 - **不提交密钥**。`.env` 已加入 `.gitignore`，新增配置项要同步到 `.env.example`（只写变量名和默认值）。
 - 回复用户、注释、文档用中文。
@@ -13,7 +14,8 @@
 
 | 改了什么 | 必须跑 |
 |---|---|
-| 任何代码 | `npm run typecheck`、`npm test` |
+| 任何代码 | `npm run typecheck`（含 web）、`npm test` |
+| `web/` | 再跑 `npm run build`，在浏览器里实际走一遍发送、重发、切换用户 |
 | `src/quota.ts`、`src/db.ts`、`src/app.ts` 中额度或请求相关的逻辑 | 再跑 `npm run proof:quota`，四项必须全部 ✅ |
 | `src/agent.ts` 的提示词、`src/tools.ts`、更换模型 | `npm run eval -- --runs 2`（需要真实 key），通过率不能低于 README 里记录的上一版；结果更新到 README 的评估表 |
 

@@ -17,6 +17,8 @@ const MIME: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
+  '.png': 'image/png',
 };
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {
@@ -122,7 +124,9 @@ async function serveStatic(ctx: Ctx, pathname: string, res: ServerResponse) {
   if (!file.startsWith(ctx.publicDir)) return sendJson(res, 404, { error: 'not_found' });
   try {
     const data = await readFile(file);
-    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
+    // Vite 产物文件名带内容哈希，可长期缓存；index.html 每次校验
+    const cache = rel.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache';
+    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': cache });
     res.end(data);
   } catch {
     sendJson(res, 404, { error: 'not_found' });
