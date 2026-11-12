@@ -9,7 +9,7 @@
     "start": "node src/server.ts",
     "dev": "node --watch src/server.ts",
     "seed:demo": "node scripts/seed-demo.ts",
-    "test": "node --test test/",
+    "test": "node --test \"test/*.test.ts\"",
     "proof:quota": "node scripts/quota-proof.ts",
     "eval": "node eval/run-eval.ts",
     "typecheck": "tsc --noEmit"
