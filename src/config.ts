@@ -30,6 +30,11 @@ export type Config = {
     mockDelayMs: number;
     timeoutMs: number;
   };
+  asr: {
+    model: string;
+    maxBytes: number;
+    perMinute: number;
+  };
 };
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -45,6 +50,12 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
       mock: env.LLM_MOCK === '1',
       mockDelayMs: Number(env.LLM_MOCK_DELAY_MS ?? 50),
       timeoutMs: Number(env.LLM_TIMEOUT_MS ?? 45000),
+    },
+    asr: {
+      // 千问语音识别，走同一个 DashScope OpenAI 兼容接口和 key
+      model: env.ASR_MODEL ?? 'qwen3-asr-flash',
+      maxBytes: Number(env.ASR_MAX_BYTES ?? 3 * 1024 * 1024),
+      perMinute: Number(env.ASR_PER_MINUTE ?? 20),
     },
   };
 }

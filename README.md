@@ -4,6 +4,7 @@
 
 - 后端：Node.js（≥ 22.18，推荐 24 LTS，开发环境 26），**零运行时依赖**：`node:http` + `node:sqlite`，直接运行 TypeScript
 - 模型：通义千问 `qwen3.6-flash`（OpenAI 兼容接口 + function calling），可换 Kimi / GLM / DeepSeek
+- 语音：网页按住录音（模拟硬件按键），上传后由千问 `qwen3-asr-flash` 云端转写，与大模型共用一个 key
 - 网页：React + Vite + Tailwind + shadcn/ui，动效用 [animate-ui](https://animate-ui.com)；Agent 每一步实时显示（NDJSON 流）
 
 ## 运行
@@ -35,7 +36,7 @@ npm start                   # http://localhost:3000
 ## 额度准确性：怎么证明
 
 ```bash
-npm test               # 12 个测试：单元 + 多进程 HTTP 集成
+npm test               # 14 个测试：单元 + 多进程 HTTP 集成
 npm run proof:quota    # 打印压测报告
 ```
 
@@ -79,6 +80,7 @@ src/
   tools.ts    5 个工具（参数校验、草稿、历史检索）
   quota.ts    预占 / 返还 / 清理 / 对账
   llm.ts      OpenAI 兼容客户端 + 离线假模型
+  asr.ts      千问语音识别、转写限流
   time.ts     时区、自然日、日期对照
 web/          网页（React + shadcn/ui + animate-ui），构建产物 web/dist 由后端提供
 test/         单元测试 + 多进程并发集成测试
@@ -91,6 +93,7 @@ docs/         架构、时序图
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
+| POST | `/api/transcribe` | 请求体为录音（webm/mp4/wav 等，≤3MB），返回 `{text}`。不占 AI 处理额度，每个用户每分钟最多 20 次 |
 | POST | `/api/notes` | `{requestId, text}`，返回 NDJSON 流（accepted → step… → done/error）；429 额度用尽，409 处理中，422 同一个 requestId 内容不同 |
 | GET | `/api/me` | 用户与今日额度 |
 | GET | `/api/quota/audit` | 当日对账：used、流水合计、扣次请求数、便签数 |
@@ -101,7 +104,7 @@ docs/         架构、时序图
 
 ## 没做的部分与限制
 
-- 语音转写用的是浏览器自带的语音识别（Chrome），没有接云端 ASR。
+- 转写是「录完再识别」，不是边说边出字；单段录音最长 60 秒。
 - 日程和提醒只保存在本地数据库，没有接入真实日历或推送。
 - 有副作用的操作是「直接执行 + 可撤销」，没有做「先确认后执行」，设计见 Part A T3。
 - 生产环境要换 PostgreSQL 并加任务队列，见 docs。

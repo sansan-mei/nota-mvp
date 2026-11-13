@@ -49,6 +49,18 @@ export const fetchAudit = () => api<Audit>('/api/quota/audit');
 export const setTodoDone = (id: number, done: boolean) => api(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify({ done }) });
 export const deleteItem = (kind: 'todos' | 'reminders' | 'events', id: number) => api(`/api/${kind}/${id}`, { method: 'DELETE' });
 
+/** 上传录音，返回转写文本（千问 ASR，不占 AI 处理额度）。 */
+export async function transcribe(blob: Blob): Promise<{ text: string; ms: number }> {
+  const res = await fetch('/api/transcribe', {
+    method: 'POST',
+    headers: { 'content-type': blob.type.split(';')[0] || 'audio/webm', 'x-user-id': currentUser },
+    body: blob,
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.message ?? body.error ?? `HTTP ${res.status}`);
+  return body;
+}
+
 /** 发送一条便签，逐行解析 NDJSON 流。非流式响应（429/409/422）转成 http_error 事件。 */
 export async function postNote(text: string, requestId: string, onEvent: (e: StreamEvent) => void): Promise<void> {
   const res = await fetch('/api/notes', {

@@ -50,8 +50,10 @@ import {
   postNote,
   setTodoDone,
   setUserId,
+  transcribe,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useRecorder } from '@/lib/recorder';
 
 const TOOL_META: Record<string, { label: string; icon: typeof FileText }> = {
   save_summary: { label: '保存摘要', icon: FileText },
@@ -254,44 +256,36 @@ function Header(props: { users: User[]; user: string; onUser: (id: string) => vo
 
 /* ------------------------------------------------------------------ */
 
-type SpeechRec = { lang: string; interimResults: boolean; continuous: boolean; start(): void; stop(): void; onresult: (e: any) => void; onerror: (e: any) => void; onend: () => void };
-
-function useSpeech(onText: (t: string) => void) {
-  const recRef = useRef<SpeechRec | null>(null);
-  const [recording, setRecording] = useState(false);
-  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  const start = () => {
-    if (!SR || recRef.current) return;
-    const rec: SpeechRec = new SR();
-    rec.lang = 'zh-CN';
-    rec.interimResults = true;
-    rec.continuous = true;
-    rec.onresult = (ev) => {
-      let s = '';
-      for (const r of ev.results) s += r[0].transcript;
-      onText(s);
-    };
-    rec.onerror = (ev) => toast.error(`语音识别失败：${ev.error}，可以直接输入文字`);
-    rec.onend = () => {
-      recRef.current = null;
-      setRecording(false);
-    };
-    recRef.current = rec;
-    rec.start();
-    setRecording(true);
-  };
-  const stop = () => recRef.current?.stop();
-  return { supported: !!SR, recording, start, stop };
-}
-
 function Composer(props: { text: string; setText: (s: string) => void; busy: boolean; canReplay: boolean; onSend: () => void; onReplay: () => void }) {
-  const base = useRef('');
-  const speech = useSpeech((t) => props.setText(base.current + t));
+  const [transcribing, setTranscribing] = useState(false);
+  const textRef = useRef(props.text);
+  textRef.current = props.text;
+
+  const recorder = useRecorder(
+    async (blob) => {
+      setTranscribing(true);
+      try {
+        const { text, ms } = await transcribe(blob);
+        if (!text) return toast.warning('没有识别到内容，请靠近麦克风再说一次');
+        const cur = textRef.current.trim();
+        props.setText(cur ? `${cur}${/[。！？.!?]$/.test(cur) ? '' : '，'}${text}` : text);
+        toast.success(`转写完成（${(ms / 1000).toFixed(1)}s），确认后点发送`);
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setTranscribing(false);
+      }
+    },
+    (msg) => toast.warning(msg),
+  );
+  const recording = recorder.state === 'recording';
+  const micDisabled = !recorder.supported || transcribing || props.busy;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>说一段话</CardTitle>
-        <CardDescription>按住麦克风模拟硬件按键录音，或直接输入；AI 会整理摘要并帮你把事办了</CardDescription>
+        <CardDescription>按住麦克风说话（模拟硬件按键录音，云端千问 ASR 转写），或直接输入；AI 会整理摘要并帮你把事办了</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="relative">
@@ -306,15 +300,26 @@ function Composer(props: { text: string; setText: (s: string) => void; busy: boo
             className="resize-none pr-2"
           />
           <AnimatePresence>
-            {speech.recording && (
+            {(recording || transcribing || recorder.state === 'starting') && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="absolute top-2 right-2 flex items-center gap-1.5 rounded-full bg-destructive px-2.5 py-1 text-xs text-white"
+                className={cn(
+                  'absolute top-2 right-2 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-white',
+                  recording ? 'bg-destructive' : 'bg-primary',
+                )}
               >
-                <motion.span className="size-1.5 rounded-full bg-white" animate={{ opacity: [1, 0.2, 1] }} transition={{ repeat: Infinity, duration: 1 }} />
-                录音中
+                {recording ? (
+                  <>
+                    <motion.span className="size-1.5 rounded-full bg-white" animate={{ opacity: [1, 0.2, 1] }} transition={{ repeat: Infinity, duration: 1 }} />
+                    录音中 {(recorder.elapsed / 1000).toFixed(1)}s
+                  </>
+                ) : (
+                  <>
+                    <Loader2 className="size-3 animate-spin" /> {transcribing ? '云端转写中…' : '打开麦克风…'}
+                  </>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -324,21 +329,26 @@ function Composer(props: { text: string; setText: (s: string) => void; busy: boo
             <TooltipTrigger asChild>
               <span>
                 <Button
-                  variant={speech.recording ? 'destructive' : 'outline'}
-                  disabled={!speech.supported}
+                  variant={recording ? 'destructive' : 'outline'}
+                  disabled={micDisabled}
+                  className="touch-none select-none"
+                  style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                  onContextMenu={(e) => e.preventDefault()}
                   onPointerDown={(e) => {
                     e.preventDefault();
-                    base.current = props.text;
-                    speech.start();
+                    // 捕获指针：手指移出按钮也不会中断录音，松手才结束
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    recorder.start();
                   }}
-                  onPointerUp={speech.stop}
-                  onPointerLeave={speech.stop}
+                  onPointerUp={recorder.stop}
+                  onPointerCancel={recorder.stop}
                 >
-                  <Mic /> 按住说话
+                  {transcribing ? <Loader2 className="animate-spin" /> : <Mic />}
+                  {recording ? '松开结束' : '按住说话'}
                 </Button>
               </span>
             </TooltipTrigger>
-            <TooltipContent>{speech.supported ? '浏览器语音识别（Chrome），模拟硬件按键 + 云端转写' : '当前浏览器不支持语音识别，请直接输入'}</TooltipContent>
+            <TooltipContent>{recorder.supported ? '按住录音，松开后上传到云端转写（最长 60 秒）' : '当前浏览器不支持录音，请直接输入'}</TooltipContent>
           </Tooltip>
           <div className="flex-1" />
           <Tooltip>
@@ -351,7 +361,7 @@ function Composer(props: { text: string; setText: (s: string) => void; busy: boo
             </TooltipTrigger>
             <TooltipContent>用上一个 requestId 再发一次，模拟网络重试：不会重复扣次</TooltipContent>
           </Tooltip>
-          <Button onClick={props.onSend} disabled={props.busy}>
+          <Button onClick={props.onSend} disabled={props.busy || transcribing || recording}>
             {props.busy ? <Loader2 className="animate-spin" /> : <Send />} 发送
           </Button>
         </div>

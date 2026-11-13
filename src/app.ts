@@ -5,11 +5,21 @@ import type { Config } from './config.ts';
 import type { DB, User } from './db.ts';
 import { getUser } from './db.ts';
 import type { LLM } from './llm.ts';
+import type { Transcriber } from './asr.ts';
+import { AUDIO_MIME_RE } from './asr.ts';
 import { commitResult, runAgent, saveSteps } from './agent.ts';
 import { auditQuota, failAndRefund, quotaView, reserve } from './quota.ts';
 import { dayKey, formatLocal } from './time.ts';
 
-type Ctx = { db: DB; llm: LLM; config: Config; publicDir: string; now?: () => Date };
+type Ctx = {
+  db: DB;
+  llm: LLM;
+  config: Config;
+  publicDir: string;
+  now?: () => Date;
+  transcribe?: Transcriber;
+  asrLimit?: (key: string) => boolean;
+};
 
 const REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const MIME: Record<string, string> = {
@@ -26,7 +36,9 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-async function readJson(req: IncomingMessage, limit = 32 * 1024): Promise<any> {
+async function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
+  const declared = Number(req.headers['content-length'] ?? 0);
+  if (declared > limit) throw Object.assign(new Error('body too large'), { status: 413 });
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
@@ -34,10 +46,32 @@ async function readJson(req: IncomingMessage, limit = 32 * 1024): Promise<any> {
     if (size > limit) throw Object.assign(new Error('body too large'), { status: 413 });
     chunks.push(chunk as Buffer);
   }
+  return Buffer.concat(chunks);
+}
+
+async function readJson(req: IncomingMessage, limit = 32 * 1024): Promise<any> {
+  const buf = await readBody(req, limit);
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+    return JSON.parse(buf.toString('utf8') || '{}');
   } catch {
     throw Object.assign(new Error('invalid json'), { status: 400 });
+  }
+}
+
+/** 语音转写：浏览器录音（模拟硬件按键录音）→ 千问 ASR → 文字。不占 AI 处理额度，单独限流。 */
+async function handleTranscribe(ctx: Ctx, req: IncomingMessage, res: ServerResponse, user: User) {
+  if (!ctx.transcribe) return sendJson(res, 503, { error: 'asr_unavailable' });
+  const mime = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+  if (!AUDIO_MIME_RE.test(mime)) return sendJson(res, 415, { error: 'unsupported_audio', message: `不支持的音频格式：${mime || '未知'}` });
+  if (ctx.asrLimit && !ctx.asrLimit(user.id)) return sendJson(res, 429, { error: 'asr_rate_limited', message: '转写太频繁，请稍后再试' });
+  const audio = await readBody(req, ctx.config.asr.maxBytes);
+  if (audio.length < 1000) return sendJson(res, 400, { error: 'audio_too_short', message: '录音太短' });
+  const t0 = Date.now();
+  try {
+    const text = await ctx.transcribe(audio, mime);
+    return sendJson(res, 200, { text, ms: Date.now() - t0, bytes: audio.length });
+  } catch (err) {
+    return sendJson(res, 502, { error: 'asr_failed', message: `转写失败：${err instanceof Error ? err.message : String(err)}` });
   }
 }
 
@@ -156,6 +190,7 @@ export function createHandler(ctx: Ctx) {
         return sendJson(res, 200, { day, ...auditQuota(ctx.db, user.id, day) });
       }
       if (req.method === 'POST' && path === '/api/notes') return await handleCreateNote(ctx, req, res, user);
+      if (req.method === 'POST' && path === '/api/transcribe') return await handleTranscribe(ctx, req, res, user);
       if (req.method === 'GET' && path === '/api/notes') {
         const ids = ctx.db.prepare('SELECT id FROM notes WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 30').all(user.id) as { id: number }[];
         return sendJson(res, 200, ids.map((r) => noteDetail(ctx, user, r.id)));
